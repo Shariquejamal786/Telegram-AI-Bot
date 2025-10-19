@@ -85,25 +85,29 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         category = " ".join(context.args) if context.args else "general"
         await update.message.reply_text(f"📰 Getting {category} news...")
         
+        # Increased timeout to 20 seconds
         url = f"https://newsapi.org/v2/top-headlines?country=in&category={category}&apiKey={NEWS_API_KEY}"
-        response = requests.get(url)
+        response = requests.get(url, timeout=20)
         
         if response.status_code == 200:
             data = response.json()
-            news_text = f"📢 **Top {category.title()} News:**\n\n"
-            for i, article in enumerate(data['articles'][:5], 1):
-                title = article['title'] or "No title available"
-                news_text += f"**{i}.** {title}\n"
-                if article.get('url'):
-                    news_text += f"🔗 [Read More]({article['url']})\n"
-                news_text += "\n"
-            
-            await update.message.reply_text(news_text, parse_mode='Markdown', disable_web_page_preview=True)
+            if data['articles']:
+                news_text = f"📢 **Top {category.title()} News:**\n\n"
+                for i, article in enumerate(data['articles'][:5], 1):
+                    title = article['title'] or "No title available"
+                    title = title.split(' - ')[0]  # Clean title
+                    news_text += f"**{i}.** {title}\n\n"
+                
+                await update.message.reply_text(news_text, parse_mode='Markdown')
+            else:
+                await update.message.reply_text("❌ No news articles found")
         else:
-            await update.message.reply_text("❌ Could not fetch news")
+            await update.message.reply_text("❌ News service busy")
             
+    except requests.exceptions.Timeout:
+        await update.message.reply_text("⏰ News service timeout. Please try again.")
     except Exception as e:
-        await update.message.reply_text("❌ News service unavailable")
+        await update.message.reply_text("❌ News service temporarily unavailable")
 
 # ========== IMAGE COMMAND ==========
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
