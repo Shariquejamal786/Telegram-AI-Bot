@@ -86,7 +86,8 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"📡 Fetching latest {category} news...")
         
         # NewsAPI URL with proper parameters
-        url = f"https://newsapi.org/v2/top-headlines?country=in&category={category}&pageSize=5&apiKey={NEWS_API_KEY}"
+        # Alternative endpoint
+url = f"https://newsapi.org/v2/everything?q=technology&sortBy=publishedAt&language=en&pageSize=5&apiKey={NEWS_API_KEY}"
         
         logger.info(f"🌐 Calling NewsAPI for: {category}")
         response = requests.get(url, timeout=20)
