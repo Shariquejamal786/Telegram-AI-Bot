@@ -42,9 +42,10 @@ def make_groq_request(user_message):
             "Content-Type": "application/json"
         }
         
+        # ✅ CORRECTED MODELS - Latest working models
         data = {
             "messages": [{"role": "user", "content": user_message}],
-            "model": "llama2-70b-4096",
+            "model": "llama-3.1-8b-instant",  # ✅ Working model
             "temperature": 0.7,
             "max_tokens": 500
         }
@@ -64,7 +65,7 @@ def make_groq_request(user_message):
             logger.info("✅ AI Response successful")
             return ai_response
         else:
-            logger.error(f"❌ Groq Error: {response.status_code}")
+            logger.error(f"❌ Groq Error: {response.status_code} - {response.text}")
             return None
             
     except Exception as e:
