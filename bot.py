@@ -1,7 +1,7 @@
 import os
 import requests
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
 import logging
 
 # Logging setup
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 
-def handle_message(update: Update, context: CallbackContext):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user_message = update.message.text
         logger.info(f"Received message: {user_message}")
@@ -37,32 +37,24 @@ def handle_message(update: Update, context: CallbackContext):
         
         if response.status_code == 200:
             ai_response = response.json()['choices'][0]['message']['content']
-            update.message.reply_text(ai_response)
+            await update.message.reply_text(ai_response)
         else:
-            update.message.reply_text("Sorry, technical issue. Try again.")
+            await update.message.reply_text("Sorry, technical issue. Try again.")
             
     except Exception as e:
         logger.error(f"Error: {e}")
-        update.message.reply_text("Error occurred. Please try again.")
+        await update.message.reply_text("Error occurred. Please try again.")
 
 def main():
     if not TELEGRAM_TOKEN or not GROQ_API_KEY:
         logger.error("Missing environment variables!")
         return
     
-    # Create updater
-    updater = Updater(TELEGRAM_TOKEN, use_context=True)
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Get dispatcher
-    dp = updater.dispatcher
-    
-    # Add message handler
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
-    
-    # Start polling
     logger.info("Bot starting...")
-    updater.start_polling()
-    updater.idle()
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
