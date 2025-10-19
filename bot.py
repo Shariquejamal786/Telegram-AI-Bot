@@ -42,7 +42,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         logger.info(f"📊 Groq Status: {response.status_code}")
-        logger.info(f"📄 Groq Response: {response.text}")
         
         if response.status_code == 200:
             ai_response = response.json()['choices'][0]['message']['content']
@@ -55,8 +54,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error("⚠️ Rate limit exceeded")
             await update.message.reply_text("⚠️ Rate limit exceeded. Try later.")
         else:
-            logger.error(f"❌ Groq Error: {response.status_code} - {response.text}")
-            await update.message.reply_text("🔧 Technical issue. Developer is fixing...")
+            logger.error(f"❌ Groq Error: {response.status_code}")
+            await update.message.reply_text("🔧 Technical issue. Please try again.")
             
     except Exception as e:
         logger.error(f"💥 Exception: {str(e)}")
