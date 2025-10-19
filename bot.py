@@ -83,71 +83,94 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         category = " ".join(context.args) if context.args else "general"
-        await update.message.reply_text(f"📰 Getting {category} news...")
+        await update.message.reply_text(f"📡 Fetching latest {category} news...")
         
-        # Better URL with multiple parameters
-        url = f"https://newsapi.org/v2/top-headlines?country=in&category={category}&pageSize=10&apiKey={NEWS_API_KEY}"
+        # NewsAPI URL with proper parameters
+        url = f"https://newsapi.org/v2/top-headlines?country=in&category={category}&pageSize=5&apiKey={NEWS_API_KEY}"
         
-        logger.info(f"📡 News API URL: {url.split('apiKey')[0]}...")  # Hide API key in logs
+        logger.info(f"🌐 Calling NewsAPI for: {category}")
+        response = requests.get(url, timeout=20)
         
-        response = requests.get(url, timeout=15)
-        logger.info(f"📊 News API Response Status: {response.status_code}")
+        logger.info(f"📊 NewsAPI Status: {response.status_code}")
+        logger.info(f"📄 Response: {response.text[:200]}...")
         
         if response.status_code == 200:
             data = response.json()
-            logger.info(f"📄 Total articles found: {data.get('totalResults', 0)}")
+            total_articles = data.get('totalResults', 0)
+            articles = data.get('articles', [])
             
-            if data.get('articles'):
-                articles = data['articles']
-                news_text = f"📢 **Top {category.title()} News:**\n\n"
+            logger.info(f"📰 Found {total_articles} total articles, {len(articles)} returned")
+            
+            if articles:
+                news_text = f"📢 **Latest {category.title()} News:**\n\n"
+                valid_articles = 0
                 
-                for i, article in enumerate(articles[:5], 1):
-                    title = article.get('title', 'No title available')
-                    # Clean the title
-                    title = title.split(' - ')[0].split(' | ')[0]
+                for i, article in enumerate(articles, 1):
+                    title = article.get('title', '').strip()
+                    source = article.get('source', {}).get('name', 'Unknown')
                     
-                    if title and title != 'No title available' and len(title) > 10:
-                        news_text += f"**{i}.** {title}\n\n"
+                    # Filter out invalid titles
+                    if (title and 
+                        title != '[Removed]' and 
+                        len(title) > 10 and
+                        not title.startswith('[')):
+                        
+                        news_text += f"**{i}.** {title}\n"
+                        news_text += f"   _Source: {source}_\n\n"
+                        valid_articles += 1
+                    
+                    if valid_articles >= 5:  # Max 5 articles
+                        break
                 
-                if len(news_text) > 50:  # If we have actual news
+                if valid_articles > 0:
+                    news_text += f"📰 _Real-time news via NewsAPI_"
                     await update.message.reply_text(news_text, parse_mode='Markdown')
                 else:
-                    await update.message.reply_text("""📰 **No recent news found**
+                    await update.message.reply_text("""📰 **No valid news articles**
 
-Try different categories:
-• `/news general`
-• `/news technology` 
-• `/news sports`
-• `/news business`
+All articles were filtered as invalid.
+Try: `/news technology` or `/news sports`
 """, parse_mode='Markdown')
             else:
-                await update.message.reply_text("""📰 **No articles available**
+                await update.message.reply_text("""📰 **No Articles Available**
 
-**Try these categories:**
-`/news general`
-`/news technology`
-`/news sports`
+**Possible Reasons:**
+• No recent news in this category
+• Try popular categories:
+  `/news general`
+  `/news technology` 
+  `/news sports`
+  `/news business`
 
-**Or try later - news service might be updating!**
+• Or try again in some time
 """, parse_mode='Markdown')
                 
+        elif response.status_code == 401:
+            await update.message.reply_text("""🔐 **NewsAPI Key Invalid**
+
+Your NewsAPI key may be:
+• Invalid or expired
+• Not activated
+• Missing verification
+
+Check your NewsAPI account.
+""")
         elif response.status_code == 429:
-            await update.message.reply_text("""⚠️ **API Limit Reached**
+            await update.message.reply_text("""📊 **Daily Limit Reached**
 
-News API daily limit reached. 
-Will reset in few hours.
+NewsAPI free tier limit reached.
+Will reset at midnight UTC.
 
-Try again tomorrow! 📅
+Try again tomorrow! 🌙
 """)
         else:
-            logger.error(f"News API Error: {response.status_code} - {response.text}")
-            await update.message.reply_text("❌ News service error. Try different category.")
+            await update.message.reply_text(f"❌ NewsAPI Error: {response.status_code}")
             
     except requests.exceptions.Timeout:
-        await update.message.reply_text("⏰ News service timeout. Try again.")
+        await update.message.reply_text("⏰ News service timeout")
     except Exception as e:
-        logger.error(f"News error: {str(e)}")
-        await update.message.reply_text("❌ News service temporarily down")
+        logger.error(f"💥 News error: {str(e)}")
+        await update.message.reply_text("❌ News service error")
 
 # ========== IMAGE COMMAND ==========
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
