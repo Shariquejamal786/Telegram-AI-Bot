@@ -4,146 +4,110 @@ import asyncio
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler
 import logging
-from io import BytesIO
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Environment variables
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
-HUGGING_FACE_TOKEN = os.environ.get("HUGGING_FACE_TOKEN")
 WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY")
 NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
 
-# Log all environment variables (keys hidden for security)
-logger.info(f"🔧 Environment Check - TELEGRAM_TOKEN: {'✅' if TELEGRAM_TOKEN else '❌'}")
-logger.info(f"🔧 Environment Check - GROQ_API_KEY: {'✅' if GROQ_API_KEY else '❌'}")
-logger.info(f"🔧 Environment Check - HUGGING_FACE_TOKEN: {'✅' if HUGGING_FACE_TOKEN else '❌'}")
-logger.info(f"🔧 Environment Check - WEATHER_API_KEY: {'✅' if WEATHER_API_KEY else '❌'}")
-logger.info(f"🔧 Environment Check - NEWS_API_KEY: {'✅' if NEWS_API_KEY else '❌'}")
-
-# ========== WEATHER FUNCTION WITH DETAILED LOGGING ==========
-def get_weather(city):
+async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("🎯 WEATHER COMMAND CALLED!")
     try:
+        city = " ".join(context.args) if context.args else "Mumbai"
+        await update.message.reply_text(f"🌤️ Checking weather for {city}...")
+        
         url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
-        logger.info(f"🌤️ Weather API Call - City: {city}, URL: {url.split('appid=')[0]}...")
+        response = requests.get(url)
         
-        response = requests.get(url, timeout=15)
-        logger.info(f"📊 Weather API Response - Status: {response.status_code}")
-        
-        if response.status_code == 200:
-            data = response.json()
-            weather_info = {
-                'city': data['name'],
-                'temp': data['main']['temp'],
-                'description': data['weather'][0]['description'],
-                'humidity': data['main']['humidity'],
-                'wind': data['wind']['speed']
-            }
-            logger.info(f"✅ Weather Data: {weather_info}")
-            return weather_info
-        elif response.status_code == 401:
-            logger.error("❌ Weather API Error: Invalid API Key")
-            return "invalid_key"
-        elif response.status_code == 404:
-            logger.error("❌ Weather API Error: City not found")
-            return "city_not_found"
-        else:
-            logger.error(f"❌ Weather API Error: {response.status_code} - {response.text[:100]}")
-            return None
-            
-    except Exception as e:
-        logger.error(f"💥 Weather Exception: {str(e)}")
-        return None
-
-# ========== NEWS FUNCTION WITH DETAILED LOGGING ==========
-def get_news(category="general"):
-    try:
-        url = f"https://newsapi.org/v2/top-headlines?country=in&category={category}&apiKey={NEWS_API_KEY}"
-        logger.info(f"📰 News API Call - Category: {category}")
-        
-        response = requests.get(url, timeout=15)
-        logger.info(f"📊 News API Response - Status: {response.status_code}")
+        logger.info(f"Weather API Status: {response.status_code}")
         
         if response.status_code == 200:
             data = response.json()
-            articles = data['articles'][:5]
-            logger.info(f"✅ News Articles Found: {len(articles)}")
-            return articles
-        elif response.status_code == 401:
-            logger.error("❌ News API Error: Invalid API Key")
-            return "invalid_key"
-        else:
-            logger.error(f"❌ News API Error: {response.status_code} - {response.text[:100]}")
-            return None
-            
-    except Exception as e:
-        logger.error(f"💥 News Exception: {str(e)}")
-        return None
-
-# ========== MESSAGE HANDLER ==========
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        user_message = update.message.text
-        logger.info(f"📨 Received: {user_message}")
-        
-        # WEATHER COMMAND
-        if user_message.lower().startswith('/weather'):
-            city = user_message[8:].strip()
-            if not city:
-                await update.message.reply_text("❌ Please specify city\nExample: /weather Delhi")
-                return
-            
-            await update.message.reply_text(f"🌤️ Fetching weather for {city}...")
-            weather_data = get_weather(city)
-            
-            if weather_data == "invalid_key":
-                await update.message.reply_text("❌ Weather service configuration error")
-            elif weather_data == "city_not_found":
-                await update.message.reply_text("❌ City not found. Try: /weather Mumbai")
-            elif weather_data:
-                weather_text = f"""
-🌤️ *Weather in {weather_data['city']}*
-• Temperature: {weather_data['temp']}°C
-• Condition: {weather_data['description'].title()}
-• Humidity: {weather_data['humidity']}%
-• Wind: {weather_data['wind']} m/s
+            weather_text = f"""
+🌤️ *Weather in {data['name']}*
+• Temperature: {data['main']['temp']}°C
+• Condition: {data['weather'][0]['description'].title()}
+• Humidity: {data['main']['humidity']}%
+• Wind: {data['wind']['speed']} m/s
 """
-                await update.message.reply_text(weather_text, parse_mode='Markdown')
-            else:
-                await update.message.reply_text("❌ Could not fetch weather data")
-            return
-
-        # NEWS COMMAND
-        elif user_message.lower().startswith('/news'):
-            category = user_message[5:].strip() or "general"
+            await update.message.reply_text(weather_text, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(f"❌ Weather error: {response.status_code}")
             
-            await update.message.reply_text(f"📰 Fetching {category} news...")
-            news_data = get_news(category)
-            
-            if news_data == "invalid_key":
-                await update.message.reply_text("❌ News service configuration error")
-            elif news_data:
-                news_text = f"*📢 Top {category.title()} News:*\n\n"
-                for i, article in enumerate(news_data, 1):
-                    title = article['title'] or "No title"
-                    url = article['url'] or ""
-                    news_text += f"{i}. {title}\n"
-                    if url:
-                        news_text += f"   [Read More]({url})\n\n"
-                
-                await update.message.reply_text(news_text, parse_mode='Markdown', disable_web_page_preview=True)
-            else:
-                await update.message.reply_text("❌ Could not fetch news")
-            return
-
-        # REST OF THE CODE SAME AS BEFORE...
-        # [Include the previous image generation and AI chat code here]
-
     except Exception as e:
-        logger.error(f"💥 Main Handler Error: {str(e)}")
-        await update.message.reply_text("❌ Error occurred. Please try again.")
+        logger.error(f"Weather error: {str(e)}")
+        await update.message.reply_text("❌ Weather service unavailable")
 
-# [Include all other functions: start_command, help_command, main etc.]
+async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("🎯 NEWS COMMAND CALLED!")
+    try:
+        category = " ".join(context.args) if context.args else "general"
+        await update.message.reply_text(f"📰 Getting {category} news...")
+        
+        url = f"https://newsapi.org/v2/top-headlines?country=in&category={category}&apiKey={NEWS_API_KEY}"
+        response = requests.get(url)
+        
+        logger.info(f"News API Status: {response.status_code}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            news_text = f"*📢 Top {category.title()} News:*\n\n"
+            for i, article in enumerate(data['articles'][:5], 1):
+                news_text += f"{i}. {article['title']}\n\n"
+            
+            await update.message.reply_text(news_text, parse_mode='Markdown')
+        else:
+            await update.message.reply_text(f"❌ News error: {response.status_code}")
+            
+    except Exception as e:
+        logger.error(f"News error: {str(e)}")
+        await update.message.reply_text("❌ News service unavailable")
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("🎯 START COMMAND CALLED!")
+    welcome_text = """
+🤖 *Welcome to Your AI Assistant!*
+
+*Commands:*
+/weather [city] - Get weather
+/news [category] - Latest news
+/help - Show help
+
+*Examples:*
+/weather Mumbai
+/news technology
+"""
+    await update.message.reply_text(welcome_text, parse_mode='Markdown')
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("🎯 HELP COMMAND CALLED!")
+    await update.message.reply_text("Help message here")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("🎯 MESSAGE HANDLER CALLED!")
+    user_message = update.message.text
+    await update.message.reply_text(f"📨 You said: {user_message}")
+
+def main():
+    logger.info("🚀 Starting Simple Bot...")
+    
+    application = Application.builder().token(TELEGRAM_TOKEN).build()
+    
+    # Add command handlers
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("weather", weather_command))
+    application.add_handler(CommandHandler("news", news_command))
+    
+    # Add message handler
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    
+    logger.info("🤖 Bot started successfully!")
+    application.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
