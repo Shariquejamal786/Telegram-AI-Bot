@@ -14,11 +14,11 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user_message = update.message.text
-        logger.info(f"Received message: {user_message}")
+        logger.info(f"📨 Received: {user_message}")
         
-        # Check if API key is available
         if not GROQ_API_KEY:
-            await update.message.reply_text("❌ API Key not configured. Please check environment variables.")
+            logger.error("❌ GROQ_API_KEY missing!")
+            await update.message.reply_text("❌ API Key not configured.")
             return
         
         headers = {
@@ -33,7 +33,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "max_tokens": 500
         }
         
-        logger.info("Sending request to Groq API...")
+        logger.info("🔄 Calling Groq API...")
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers=headers,
@@ -41,22 +41,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             timeout=30
         )
         
-        logger.info(f"Groq API response status: {response.status_code}")
+        logger.info(f"📊 Groq Status: {response.status_code}")
+        logger.info(f"📄 Groq Response: {response.text}")
         
         if response.status_code == 200:
             ai_response = response.json()['choices'][0]['message']['content']
+            logger.info("✅ AI Response successful")
             await update.message.reply_text(ai_response)
         elif response.status_code == 401:
-            await update.message.reply_text("❌ Invalid API Key. Please check Groq API key.")
+            logger.error("❌ Invalid Groq API Key")
+            await update.message.reply_text("❌ Invalid API Key. Please check Groq settings.")
         elif response.status_code == 429:
-            await update.message.reply_text("⚠️ Rate limit exceeded. Please try again later.")
+            logger.error("⚠️ Rate limit exceeded")
+            await update.message.reply_text("⚠️ Rate limit exceeded. Try later.")
         else:
-            error_msg = f"❌ API Error: {response.status_code} - {response.text}"
-            logger.error(error_msg)
-            await update.message.reply_text("Sorry, technical issue. Please try again later.")
+            logger.error(f"❌ Groq Error: {response.status_code} - {response.text}")
+            await update.message.reply_text("🔧 Technical issue. Developer is fixing...")
             
     except Exception as e:
-        logger.error(f"Error: {str(e)}")
+        logger.error(f"💥 Exception: {str(e)}")
         await update.message.reply_text("❌ Error occurred. Please try again.")
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -66,19 +69,17 @@ def main():
     if not TELEGRAM_TOKEN:
         logger.error("❌ TELEGRAM_TOKEN missing!")
         return
+    
     if not GROQ_API_KEY:
         logger.error("❌ GROQ_API_KEY missing!")
-        return
-    
-    logger.info("✅ Starting bot with all configurations...")
+    else:
+        logger.info(f"✅ GROQ_API_KEY found: {GROQ_API_KEY[:10]}...")
     
     application = Application.builder().token(TELEGRAM_TOKEN).build()
-    
-    # Add handlers
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     application.add_handler(CommandHandler("start", start_command))
     
-    logger.info("🤖 Bot is running and polling...")
+    logger.info("🚀 Bot started successfully!")
     application.run_polling()
 
 if __name__ == "__main__":
