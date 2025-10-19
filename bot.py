@@ -85,94 +85,71 @@ async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         category = " ".join(context.args) if context.args else "general"
         await update.message.reply_text(f"📡 Fetching latest {category} news...")
         
-        # NewsAPI URL with proper parameters
-        # Alternative endpoint
-url = f"https://newsapi.org/v2/everything?q=technology&sortBy=publishedAt&language=en&pageSize=5&apiKey={NEWS_API_KEY}"
+        # Try multiple endpoints
+        urls = [
+            f"https://newsapi.org/v2/top-headlines?country=us&category={category}&pageSize=5&apiKey={NEWS_API_KEY}",
+            f"https://newsapi.org/v2/top-headlines?country=in&category={category}&pageSize=5&apiKey={NEWS_API_KEY}",
+            f"https://newsapi.org/v2/everything?q={category}&sortBy=publishedAt&language=en&pageSize=5&apiKey={NEWS_API_KEY}"
+        ]
         
-        logger.info(f"🌐 Calling NewsAPI for: {category}")
-        response = requests.get(url, timeout=20)
-        
-        logger.info(f"📊 NewsAPI Status: {response.status_code}")
-        logger.info(f"📄 Response: {response.text[:200]}...")
-        
-        if response.status_code == 200:
-            data = response.json()
-            total_articles = data.get('totalResults', 0)
-            articles = data.get('articles', [])
-            
-            logger.info(f"📰 Found {total_articles} total articles, {len(articles)} returned")
-            
-            if articles:
-                news_text = f"📢 **Latest {category.title()} News:**\n\n"
-                valid_articles = 0
+        for url in urls:
+            try:
+                logger.info(f"🌐 Trying: {url.split('?')[0]}")
+                response = requests.get(url, timeout=15)
                 
-                for i, article in enumerate(articles, 1):
-                    title = article.get('title', '').strip()
-                    source = article.get('source', {}).get('name', 'Unknown')
+                if response.status_code == 200:
+                    data = response.json()
+                    articles = data.get('articles', [])
                     
-                    # Filter out invalid titles
-                    if (title and 
-                        title != '[Removed]' and 
-                        len(title) > 10 and
-                        not title.startswith('[')):
+                    if articles:
+                        news_text = f"📢 **Latest {category.title()} News:**\n\n"
+                        valid_articles = 0
                         
-                        news_text += f"**{i}.** {title}\n"
-                        news_text += f"   _Source: {source}_\n\n"
-                        valid_articles += 1
-                    
-                    if valid_articles >= 5:  # Max 5 articles
-                        break
+                        for i, article in enumerate(articles, 1):
+                            title = article.get('title', '').strip()
+                            source = article.get('source', {}).get('name', 'Unknown')
+                            
+                            if (title and 
+                                title != '[Removed]' and 
+                                len(title) > 10 and
+                                not title.startswith('[')):
+                                
+                                news_text += f"**{i}.** {title}\n"
+                                news_text += f"   _Source: {source}_\n\n"
+                                valid_articles += 1
+                            
+                            if valid_articles >= 5:
+                                break
+                        
+                        if valid_articles > 0:
+                            news_text += f"📰 _Real-time news via NewsAPI_"
+                            await update.message.reply_text(news_text, parse_mode='Markdown')
+                            return
                 
-                if valid_articles > 0:
-                    news_text += f"📰 _Real-time news via NewsAPI_"
-                    await update.message.reply_text(news_text, parse_mode='Markdown')
-                else:
-                    await update.message.reply_text("""📰 **No valid news articles**
+            except requests.exceptions.Timeout:
+                continue
+            except Exception as e:
+                logger.error(f"URL failed: {str(e)}")
+                continue
+        
+        # If all URLs failed
+        await update.message.reply_text("""📰 **News Service Temporarily Unavailable**
 
-All articles were filtered as invalid.
-Try: `/news technology` or `/news sports`
+**Try:**
+• Different category: `/news sports`
+• Wait 5 minutes and try again
+• Check back later
+
+**Working Categories:**
+`/news technology`
+`/news sports` 
+`/news business`
+`/news general`
 """, parse_mode='Markdown')
-            else:
-                await update.message.reply_text("""📰 **No Articles Available**
-
-**Possible Reasons:**
-• No recent news in this category
-• Try popular categories:
-  `/news general`
-  `/news technology` 
-  `/news sports`
-  `/news business`
-
-• Or try again in some time
-""", parse_mode='Markdown')
-                
-        elif response.status_code == 401:
-            await update.message.reply_text("""🔐 **NewsAPI Key Invalid**
-
-Your NewsAPI key may be:
-• Invalid or expired
-• Not activated
-• Missing verification
-
-Check your NewsAPI account.
-""")
-        elif response.status_code == 429:
-            await update.message.reply_text("""📊 **Daily Limit Reached**
-
-NewsAPI free tier limit reached.
-Will reset at midnight UTC.
-
-Try again tomorrow! 🌙
-""")
-        else:
-            await update.message.reply_text(f"❌ NewsAPI Error: {response.status_code}")
             
-    except requests.exceptions.Timeout:
-        await update.message.reply_text("⏰ News service timeout")
     except Exception as e:
-        logger.error(f"💥 News error: {str(e)}")
+        logger.error(f"💥 News command error: {str(e)}")
         await update.message.reply_text("❌ News service error")
-
 # ========== IMAGE COMMAND ==========
 async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
