@@ -74,7 +74,7 @@ def make_groq_request(user_message):
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Hello! I'm your AI assistant. How can I help you today?")
 
-def main():
+async def main():
     logger.info("🔧 Starting bot...")
     
     if not TELEGRAM_TOKEN:
@@ -86,6 +86,9 @@ def main():
         application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
         application.add_handler(CommandHandler("start", start_command))
         
+        # ✅ YEH LINE ADD KARO - WEBHOOK DELETE
+        await application.bot.delete_webhook()
+        
         logger.info("🚀 Bot started successfully!")
         application.run_polling()
         
@@ -93,4 +96,5 @@ def main():
         logger.error(f"💥 Failed to start: {str(e)}")
 
 if __name__ == "__main__":
-    main()
+    # ✅ YEH LINE CHANGE KARO
+    asyncio.run(main())
