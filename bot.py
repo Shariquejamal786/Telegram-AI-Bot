@@ -33,13 +33,7 @@ user_sessions = {}
 
 # Fun responses
 FUN_RESPONSES = {
-    "greetings": ["🎉 Hello there!", "👋 Hey! Great to see you!", "😊 Namaste! Kaise ho?", "🚀 Welcome back!"],
-    "thinking": ["🤔 Let me think...", "💭 Processing...", "🧠 Analyzing...", "⚡ Crunching data..."],
-    "errors": ["😅 Oops! Something went wrong", "🔄 Let's try that again", "📡 Connection issue", "🤖 Bot moment!"]
-}
-
-# ========== GEMINI AI FUNCTION ==========
-def get_gemini_response(user_message, user_name, conversation_history):
+    "greetings": ["🎉 Hello there!", "👋 Hey! Great tdef get_gemini_response(user_message, user_name, conversation_history):
     try:
         if not GEMINI_API_KEY:
             return None
@@ -68,14 +62,19 @@ RESPONSE GUIDELINES:
 - Be helpful and positive
 - Use Indian cultural references when relevant
 """
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(context)
         
         return response.text
         
     except Exception as e:
         logger.error(f"Gemini error: {str(e)}")
-        return None
+        return Noneo see you!", "😊 Namaste! Kaise ho?", "🚀 Welcome back!"],
+    "thinking": ["🤔 Let me think...", "💭 Processing...", "🧠 Analyzing...", "⚡ Crunching data..."],
+    "errors": ["😅 Oops! Something went wrong", "🔄 Let's try that again", "📡 Connection issue", "🤖 Bot moment!"]
+}
+
+# ========== GEMINI AI FUNCTION ==========
 
 # ========== MEMORY MANAGEMENT ==========
 def get_user_session(user_id, user_name):
