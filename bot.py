@@ -45,57 +45,38 @@ def get_gemini_response(user_message, user_name, conversation_history):
             logger.error("❌ Gemini API Key missing")
             return None
         
-        # Clean and optimized context
-        context = f"""You are {user_name}'s best friend 'MeraAI'. Talk exactly like a real human friend from India.
+        # Simple context
+        context = f"""You are {user_name}'s friendly AI assistant. Respond in Hinglish naturally.
 
-PERSONALITY:
-- Speak natural Hinglish (Hindi+English mix)
-- Use emotions and emojis
-- Be funny and caring
-- Remember everything we talked about
-- Ask follow-up questions
-- Show you actually care
-
-CONVERSATION HISTORY:
+Previous chat:
 {conversation_history}
 
-{user_name}'s current message: {user_message}
+User: {user_message}
 
-Respond like a real friend, not a robot. Be warm and personal."""
+Respond like a real friend:"""
         
-        # Configure Gemini with better settings
-        generation_config = {
-            "temperature": 0.9,  # More creative
-            "top_p": 0.8,
-            "top_k": 40,
-            "max_output_tokens": 500,
-        }
-
-        safety_settings = [
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_NONE"
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH", 
-                "threshold": "BLOCK_NONE"
-            }
+        # ✅ TRY THESE MODELS IN ORDER:
+        models_to_try = [
+            'gemini-1.0-pro',      # Most compatible
+            'gemini-pro',           # Legacy name
+            'models/gemini-pro',    # Full path
         ]
-
-        model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
-            generation_config=generation_config,
-            safety_settings=safety_settings
-        )
         
-        response = model.generate_content(context)
+        for model_name in models_to_try:
+            try:
+                logger.info(f"🔄 Trying model: {model_name}")
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(context)
+                
+                if response.text:
+                    logger.info(f"✅ Success with model: {model_name}")
+                    return response.text
+            except Exception as model_error:
+                logger.warning(f"❌ Model {model_name} failed: {model_error}")
+                continue
         
-        if response.text:
-            logger.info("✅ Gemini response successful")
-            return response.text
-        else:
-            logger.error("❌ Gemini returned empty response")
-            return None
+        logger.error("❌ All Gemini models failed")
+        return None
             
     except Exception as e:
         logger.error(f"💥 Gemini API Error: {str(e)}")
@@ -572,6 +553,22 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ========== MAIN FUNCTION ==========
 def main():
+    # Temporary model check - ADD THIS
+    try:
+        available_models = []
+        for model in genai.list_models():
+            if 'gemini' in model.name.lower():
+                available_models.append(model.name)
+                logger.info(f"🔍 Found model: {model.name}")
+        
+        if available_models:
+            logger.info(f"✅ Available Gemini models: {available_models}")
+        else:
+            logger.error("❌ No Gemini models found!")
+    except Exception as e:
+        logger.error(f"❌ Error checking models: {e}")
+    
+    # Rest of your main function...
     logger.info("🚀 Starting MeraAI with Google Gemini...")
     
     # Log AI status
