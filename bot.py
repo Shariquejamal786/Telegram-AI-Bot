@@ -5,54 +5,126 @@ from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes, CommandHandler
 import logging
 from io import BytesIO
+from datetime import datetime, timedelta
 
 # Logging setup
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Environment variables
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY")
 NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
 HUGGING_FACE_TOKEN = os.environ.get("HUGGING_FACE_TOKEN")
 
-# ========== IMAGE GENERATION ==========
-def generate_image(prompt):
-    try:
-        # Try multiple models for better success rate
-        models = [
-            "black-forest-labs/FLUX.1-schnell",  # Fast model
-            "stabilityai/stable-diffusion-2-1",  # Reliable model
-            "runwayml/stable-diffusion-v1-5"     # Original model
-        ]
-        
-        for model in models:
-            try:
-                API_URL = f"https://api-inference.huggingface.co/models/{model}"
-                headers = {"Authorization": f"Bearer {HUGGING_FACE_TOKEN}"}
-                
-                logger.info(f"🖼️ Trying model: {model}")
-                response = requests.post(API_URL, headers=headers, json={"inputs": prompt}, timeout=60)
-                
-                if response.status_code == 200:
-                    logger.info(f"✅ Image generated with {model}")
-                    return response.content
-                elif response.status_code == 503:
-                    logger.info(f"🔄 Model {model} is loading, trying next...")
-                    continue
-                    
-            except Exception as e:
-                logger.error(f"❌ Model {model} failed: {str(e)}")
-                continue
-        
-        logger.error("❌ All image models failed")
-        return None
-        
-    except Exception as e:
-        logger.error(f"💥 Image generation error: {str(e)}")
-        return None
+# Memory Storage - Yeh line IMPORTANT hai!
+user_sessions = {}
 
-# ========== WEATHER COMMAND ==========
+# ========== MEMORY MANAGEMENT ==========
+def get_user_session(user_id, user_name):
+    current_time = datetime.now()
+    
+    # Clean old sessions (1 hour)
+    for uid in list(user_sessions.keys()):
+        if current_time - user_sessions[uid]['last_activity'] > timedelta(hours=1):
+            del user_sessions[uid]
+            logger.info(f"🧹 Cleared old session for user {uid}")
+    
+    # Create new session or update existing
+    if user_id not in user_sessions:
+        user_sessions[user_id] = {
+            'history': [
+                {
+                    "role": "system", 
+                    "content": f"You are {user_name}'s helpful friend. Respond in friendly Hinglish. Remember previous conversations and be contextual."
+                }
+            ],
+            'last_activity': current_time,
+            'user_name': user_name
+        }
+        logger.info(f"🎯 New session started for {user_name}")
+    else:
+        user_sessions[user_id]['last_activity'] = current_time
+    
+    return user_sessions[user_id]
+
+def add_to_memory(user_id, role, content):
+    if user_id in user_sessions:
+        user_sessions[user_id]['history'].append({"role": role, "content": content})
+        
+        # Keep only last 6 messages (to avoid too long context)
+        if len(user_sessions[user_id]['history']) > 6:
+            user_sessions[user_id]['history'] = user_sessions[user_id]['history'][-6:]
+
+# ========== AI CHAT WITH MEMORY ==========
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        user_id = update.message.from_user.id
+        user_name = update.message.from_user.first_name
+        user_message = update.message.text
+        
+        # Skip commands
+        if user_message.startswith('/'):
+            return
+        
+        logger.info(f"💬 {user_name}: {user_message}")
+        
+        # Get user session with memory
+        session = get_user_session(user_id, user_name)
+        
+        # Add user message to memory
+        add_to_memory(user_id, "user", user_message)
+        
+        if not GROQ_API_KEY:
+            await update.message.reply_text("❌ AI service unavailable")
+            return
+        
+        # AI call with MEMORY
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "messages": session['history'],
+            "model": "llama-3.1-8b-instant",
+            "temperature": 0.7,
+            "max_tokens": 500
+        }
+        
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=data,
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            ai_response = response.json()['choices'][0]['message']['content']
+            
+            # Add AI response to memory
+            add_to_memory(user_id, "assistant", ai_response)
+            
+            logger.info(f"🤖 Bot: {ai_response[:50]}...")
+            await update.message.reply_text(ai_response)
+        else:
+            await update.message.reply_text("❌ AI service busy")
+            
+    except Exception as e:
+        logger.error(f"💥 Chat error: {str(e)}")
+        await update.message.reply_text("❌ Error processing message")
+
+# ========== CLEAR MEMORY COMMAND ==========
+async def clear_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    if user_id in user_sessions:
+        del user_sessions[user_id]
+        await update.message.reply_text("🧹 Memory cleared! New conversation started.")
+    else:
+        await update.message.reply_text("ℹ️ No active conversation to clear.")
+
+# ========== OTHER COMMANDS (SAME AS BEFORE) ==========
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         city = " ".join(context.args) if context.args else "Mumbai"
@@ -70,7 +142,6 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🌈 **Condition:** {data['weather'][0]['description'].title()}
 💧 **Humidity:** {data['main']['humidity']}%
 💨 **Wind Speed:** {data['wind']['speed']} m/s
-🌡️ **Feels Like:** {data['main']['feels_like']}°C
 """
             await update.message.reply_text(weather_text, parse_mode='Markdown')
         else:
@@ -79,227 +150,67 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text("❌ Weather service unavailable")
 
-# ========== NEWS COMMAND ==========
 async def news_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         category = " ".join(context.args) if context.args else "general"
-        await update.message.reply_text(f"📡 Fetching latest {category} news...")
+        await update.message.reply_text(f"📰 Getting {category} news...")
         
-        # Try multiple endpoints
-        urls = [
-            f"https://newsapi.org/v2/top-headlines?country=us&category={category}&pageSize=5&apiKey={NEWS_API_KEY}",
-            f"https://newsapi.org/v2/top-headlines?country=in&category={category}&pageSize=5&apiKey={NEWS_API_KEY}",
-            f"https://newsapi.org/v2/everything?q={category}&sortBy=publishedAt&language=en&pageSize=5&apiKey={NEWS_API_KEY}"
-        ]
-        
-        for url in urls:
-            try:
-                logger.info(f"🌐 Trying: {url.split('?')[0]}")
-                response = requests.get(url, timeout=15)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    articles = data.get('articles', [])
-                    
-                    if articles:
-                        news_text = f"📢 **Latest {category.title()} News:**\n\n"
-                        valid_articles = 0
-                        
-                        for i, article in enumerate(articles, 1):
-                            title = article.get('title', '').strip()
-                            source = article.get('source', {}).get('name', 'Unknown')
-                            
-                            if (title and 
-                                title != '[Removed]' and 
-                                len(title) > 10 and
-                                not title.startswith('[')):
-                                
-                                news_text += f"**{i}.** {title}\n"
-                                news_text += f"   _Source: {source}_\n\n"
-                                valid_articles += 1
-                            
-                            if valid_articles >= 5:
-                                break
-                        
-                        if valid_articles > 0:
-                            news_text += f"📰 _Real-time news via NewsAPI_"
-                            await update.message.reply_text(news_text, parse_mode='Markdown')
-                            return
-                
-            except requests.exceptions.Timeout:
-                continue
-            except Exception as e:
-                logger.error(f"URL failed: {str(e)}")
-                continue
-        
-        # If all URLs failed
-        await update.message.reply_text("""📰 **News Service Temporarily Unavailable**
-
-**Try:**
-• Different category: `/news sports`
-• Wait 5 minutes and try again
-• Check back later
-
-**Working Categories:**
-`/news technology`
-`/news sports` 
-`/news business`
-`/news general`
-""", parse_mode='Markdown')
-            
-    except Exception as e:
-        logger.error(f"💥 News command error: {str(e)}")
-        await update.message.reply_text("❌ News service error")
-# ========== IMAGE COMMAND ==========
-async def image_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        prompt = " ".join(context.args) if context.args else ""
-        
-        if not prompt:
-            await update.message.reply_text("""
-🖼️ **Image Generation Help**
-
-Usage: `/image your description here`
-
-**Examples:**
-• `/image a beautiful sunset`
-• `/image a cute cartoon cat`
-• `/image futuristic city landscape`
-• `/image peaceful mountain view`
-
-🎨 **Be creative with your descriptions!**
-""", parse_mode='Markdown')
-            return
-        
-        await update.message.reply_text(f"🎨 Generating image: *{prompt}*", parse_mode='Markdown')
-        
-        # Generate image
-        image_data = generate_image(prompt)
-        
-        if image_data:
-            # Send image to Telegram
-            await update.message.reply_photo(
-                photo=BytesIO(image_data), 
-                caption=f"🖼️ **{prompt}**\n\n✨ Generated by AI",
-                parse_mode='Markdown'
-            )
-            logger.info("✅ Image sent successfully")
-        else:
-            await update.message.reply_text("""
-❌ **Image Generation Failed**
-
-**Possible Reasons:**
-• AI models are currently busy
-• Try a simpler description
-• Wait 1 minute and try again
-• Use common objects/animals
-
-🔄 **Try these examples:**
-`/image sunset`
-`/image cat`
-`/image flower`
-""", parse_mode='Markdown')
-            
-    except Exception as e:
-        logger.error(f"💥 Image command error: {str(e)}")
-        await update.message.reply_text("❌ Error generating image. Please try again.")
-
-# ========== AI CHAT HANDLER ==========
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        user_message = update.message.text
-        
-        # Skip if it's a command
-        if user_message.startswith('/'):
-            return
-            
-        logger.info(f"💬 AI Chat: {user_message}")
-        
-        if not GROQ_API_KEY:
-            await update.message.reply_text("❌ AI service unavailable")
-            return
-        
-        # Groq AI API call
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        data = {
-            "messages": [{"role": "user", "content": user_message}],
-            "model": "llama-3.1-8b-instant",
-            "temperature": 0.7,
-            "max_tokens": 500
-        }
-        
-        loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, lambda: requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            headers=headers,
-            json=data,
-            timeout=30
-        ))
+        url = f"https://newsapi.org/v2/top-headlines?country=in&category={category}&pageSize=5&apiKey={NEWS_API_KEY}"
+        response = requests.get(url, timeout=20)
         
         if response.status_code == 200:
-            ai_response = response.json()['choices'][0]['message']['content']
-            await update.message.reply_text(f"🤖 {ai_response}")
+            data = response.json()
+            if data.get('articles'):
+                news_text = f"📢 **Top {category.title()} News:**\n\n"
+                for i, article in enumerate(data['articles'][:5], 1):
+                    title = article.get('title', 'No title available')
+                    title = title.split(' - ')[0]
+                    news_text += f"**{i}.** {title}\n\n"
+                
+                await update.message.reply_text(news_text, parse_mode='Markdown')
+            else:
+                await update.message.reply_text("❌ No news articles found")
         else:
-            await update.message.reply_text("❌ AI service busy. Please try again.")
+            await update.message.reply_text("❌ News service busy")
             
     except Exception as e:
-        logger.error(f"💥 AI Chat error: {str(e)}")
-        await update.message.reply_text("❌ Error processing your message.")
+        await update.message.reply_text("❌ News service unavailable")
 
-# ========== START & HELP COMMANDS ==========
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = """
-🤖 **Welcome to Your Super AI Assistant!**
+🤖 **Welcome to Your Smart AI Assistant!**
 
-✨ **Available Commands:**
+✨ **Now with MEMORY!** I'll remember our conversation.
 
-🌤️ `/weather [city]` - Get weather updates
-📰 `/news [category]` - Latest news headlines  
-🖼️ `/image [description]` - Generate AI images
-ℹ️ `/help` - Show all commands
+🛠 **Commands:**
+/start - Welcome message  
+/help - All commands guide
+/weather [city] - Get weather
+/news [category] - Latest news
+/clear - Clear conversation memory
 
-🎯 **Examples:**
-• `/weather Delhi`
-• `/news technology` 
-• `/image beautiful sunset`
+💬 **Normal Chat:** Just talk to me! I'll remember everything.
 
-💬 **Normal Chat:** Just type your message!
-
-🚀 **Powered by Advanced AI Technology**
+🚀 **Powered by AI with Memory**
 """
     await update.message.reply_text(welcome_text, parse_mode='Markdown')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = """
-🆘 **Help Guide - All Commands**
+🆘 **Help Guide**
 
-🌤️ **Weather Updates:**
-`/weather [city]`
-Example: `/weather Mumbai`
+🌤️ **Weather:** `/weather [city]`
+📰 **News:** `/news [category]`
+🧹 **Clear Memory:** `/clear`
+💬 **Chat:** Just type normally!
 
-📰 **News Updates:**
-`/news [category]`  
-Categories: general, business, sports, technology, entertainment
-
-🖼️ **Image Generation:**
-`/image [description]`
-Example: `/image futuristic city`
-
-💬 **AI Chat:**
-Just type normal messages!
-
-🔧 **Need Help?**
-Try simpler descriptions for images
+🎯 **Now I remember our conversations!**
 """
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
 # ========== MAIN FUNCTION ==========
 def main():
-    logger.info("🚀 Starting Super Bot with All Features...")
+    logger.info("🚀 Starting Bot with MEMORY...")
     
     application = Application.builder().token(TELEGRAM_TOKEN).build()
     
@@ -308,12 +219,12 @@ def main():
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("weather", weather_command))
     application.add_handler(CommandHandler("news", news_command))
-    application.add_handler(CommandHandler("image", image_command))
+    application.add_handler(CommandHandler("clear", clear_command))
     
-    # Add message handler for AI chat
+    # Add message handler with MEMORY
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    logger.info("🤖 Bot started successfully with all features!")
+    logger.info("🤖 Bot with MEMORY started successfully!")
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
