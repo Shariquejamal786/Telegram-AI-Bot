@@ -39,6 +39,11 @@ FUN_RESPONSES = {
 }
             
         # Prepare conversation context
+def get_gemini_response(user_message, user_name, conversation_history):
+    try:
+        if not GEMINI_API_KEY:
+            return None
+            
         context = f"""You are {user_name}'s friendly AI assistant named 'MeraAI'. Respond in Hinglish (Hindi+English mix).
 
 USER PERSONALITY:
@@ -63,7 +68,6 @@ RESPONSE GUIDELINES:
         
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(context)
-        
         return response.text
         
     except Exception as e:
