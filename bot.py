@@ -55,11 +55,12 @@ User: {user_message}
 
 Respond like a real friend:"""
         
-        # ✅ TRY THESE MODELS IN ORDER:
+        # ✅ NEW 2024 GEMINI MODELS:
         models_to_try = [
-            'gemini-1.0-pro',      # Most compatible
-            'gemini-pro',           # Legacy name
-            'models/gemini-pro',    # Full path
+            'gemini-1.5-flash-latest',    # Latest flash model
+            'gemini-1.5-pro-latest',      # Latest pro model  
+            'gemini-1.0-pro-latest',      # Legacy latest
+            'models/gemini-pro',          # Full path
         ]
         
         for model_name in models_to_try:
