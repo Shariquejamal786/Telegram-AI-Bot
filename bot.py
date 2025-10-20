@@ -33,14 +33,13 @@ user_sessions = {}
 
 # Fun responses
 FUN_RESPONSES = {
-    "greetings": ["🎉 Hello there!", "👋 Hey! Great tdef get_gemini_response(user_message, user_name, conversation_history):
+    def get_gemini_response(user_message, user_name, conversation_history):
     try:
         if not GEMINI_API_KEY:
             return None
             
         # Prepare conversation context
-        context = f"""
-You are {user_name}'s friendly AI assistant named 'MeraAI'. Respond in Hinglish (Hindi+English mix).
+        context = f"""You are {user_name}'s friendly AI assistant named 'MeraAI'. Respond in Hinglish (Hindi+English mix).
 
 USER PERSONALITY:
 - Name: {user_name}
@@ -60,8 +59,8 @@ RESPONSE GUIDELINES:
 - Keep responses engaging but concise
 - Ask follow-up questions sometimes
 - Be helpful and positive
-- Use Indian cultural references when relevant
-"""
+- Use Indian cultural references when relevant"""
+        
         model = genai.GenerativeModel('gemini-1.5-flash')
         response = model.generate_content(context)
         
@@ -69,10 +68,7 @@ RESPONSE GUIDELINES:
         
     except Exception as e:
         logger.error(f"Gemini error: {str(e)}")
-        return Noneo see you!", "😊 Namaste! Kaise ho?", "🚀 Welcome back!"],
-    "thinking": ["🤔 Let me think...", "💭 Processing...", "🧠 Analyzing...", "⚡ Crunching data..."],
-    "errors": ["😅 Oops! Something went wrong", "🔄 Let's try that again", "📡 Connection issue", "🤖 Bot moment!"]
-}
+        return None
 
 # ========== GEMINI AI FUNCTION ==========
 
