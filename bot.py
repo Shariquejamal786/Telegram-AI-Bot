@@ -37,45 +37,69 @@ FUN_RESPONSES = {
     "thinking": ["🤔 Let me think...", "💭 Processing...", "🧠 Analyzing...", "⚡ Crunching data..."],
     "errors": ["😅 Oops! Something went wrong", "🔄 Let's try that again", "📡 Connection issue", "🤖 Bot moment!"]
 }
-            
-        # Prepare conversation context
+
+# ========== GEMINI AI FUNCTION ==========
 def get_gemini_response(user_message, user_name, conversation_history):
     try:
         if not GEMINI_API_KEY:
+            logger.error("❌ Gemini API Key missing")
             return None
-            
-        context = f"""You are {user_name}'s friendly AI assistant named 'MeraAI'. Respond in Hinglish (Hindi+English mix).
+        
+        # Clean and optimized context
+        context = f"""You are {user_name}'s best friend 'MeraAI'. Talk exactly like a real human friend from India.
 
-USER PERSONALITY:
-- Name: {user_name}
-- Conversation style: Friendly, casual
-- Language preference: Hinglish
+PERSONALITY:
+- Speak natural Hinglish (Hindi+English mix)
+- Use emotions and emojis
+- Be funny and caring
+- Remember everything we talked about
+- Ask follow-up questions
+- Show you actually care
 
 CONVERSATION HISTORY:
 {conversation_history}
 
-CURRENT MESSAGE:
-{user_name}: {user_message}
+{user_name}'s current message: {user_message}
 
-RESPONSE GUIDELINES:
-- Be conversational and friendly
-- Use emojis appropriately  
-- Remember context from history
-- Keep responses engaging but concise
-- Ask follow-up questions sometimes
-- Be helpful and positive
-- Use Indian cultural references when relevant"""
+Respond like a real friend, not a robot. Be warm and personal."""
         
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        # Configure Gemini with better settings
+        generation_config = {
+            "temperature": 0.9,  # More creative
+            "top_p": 0.8,
+            "top_k": 40,
+            "max_output_tokens": 500,
+        }
+
+        safety_settings = [
+            {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_NONE"
+            },
+            {
+                "category": "HARM_CATEGORY_HATE_SPEECH", 
+                "threshold": "BLOCK_NONE"
+            }
+        ]
+
+        model = genai.GenerativeModel(
+            model_name='gemini-1.5-flash',
+            generation_config=generation_config,
+            safety_settings=safety_settings
+        )
+        
         response = model.generate_content(context)
-        return response.text
         
+        if response.text:
+            logger.info("✅ Gemini response successful")
+            return response.text
+        else:
+            logger.error("❌ Gemini returned empty response")
+            return None
+            
     except Exception as e:
-        logger.error(f"Gemini error: {str(e)}")
+        logger.error(f"💥 Gemini API Error: {str(e)}")
         return None
-
-# ========== GEMINI AI FUNCTION ==========
-
 # ========== MEMORY MANAGEMENT ==========
 def get_user_session(user_id, user_name):
     current_time = datetime.now()
