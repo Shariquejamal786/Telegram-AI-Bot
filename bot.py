@@ -33,10 +33,10 @@ user_sessions = {}
 
 # Fun responses
 FUN_RESPONSES = {
-    def get_gemini_response(user_message, user_name, conversation_history):
-    try:
-        if not GEMINI_API_KEY:
-            return None
+    "greetings": ["🎉 Hello there!", "👋 Hey! Great to see you!", "😊 Namaste! Kaise ho?", "🚀 Welcome back!"],
+    "thinking": ["🤔 Let me think...", "💭 Processing...", "🧠 Analyzing...", "⚡ Crunching data..."],
+    "errors": ["😅 Oops! Something went wrong", "🔄 Let's try that again", "📡 Connection issue", "🤖 Bot moment!"]
+}
             
         # Prepare conversation context
         context = f"""You are {user_name}'s friendly AI assistant named 'MeraAI'. Respond in Hinglish (Hindi+English mix).
